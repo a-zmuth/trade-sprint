@@ -14,37 +14,6 @@ export default function Home() {
   const [holdings, setHoldings] = useState(0);
   const [seed, setSeed] = useState('');
   const [user, setUser] = useState<any>(null);
-
-  // Check for user session on mount
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      setUser(session?.user ?? null);
-      if (session?.access_token) fetchUserStats(session.access_token);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
-      setUser(session?.user ?? null);
-      if (session?.access_token) fetchUserStats(session.access_token);
-      else setUserStats(null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [fetchUserStats]);
-
-  const signIn = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) alert(error.message);
-  };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
-
   const [trades, setTrades] = useState<{tick: number, type: 'buy' | 'sell', percentage: number, price: number}[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verificationResult, setVerificationResult] = useState<{success: boolean, error?: string} | null>(null);
@@ -67,6 +36,22 @@ export default function Home() {
       console.error('Failed to fetch user stats:', e);
     }
   }, []);
+
+  // Check for user session on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) fetchUserStats(session.access_token);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) fetchUserStats(session.access_token);
+      else setUserStats(null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchUserStats]);
 
   // Fetch Leaderboards
   const fetchLeaderboards = useCallback(async () => {
