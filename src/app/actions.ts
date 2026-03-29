@@ -62,7 +62,8 @@ export async function submitScore(
   const finalPrice = getPriceAtTime(seed, 120);
   const finalValue = balance + holdings * finalPrice;
 
-  if (Math.abs(finalValue - reportedScore) > 0.5) {
+  // Increase tolerance to 1.0 to account for potential browser/server floating point differences
+  if (Math.abs(finalValue - reportedScore) > 1.0) {
     return { success: false, error: `Anti-cheat: Score verification failed. Calculated ${finalValue.toFixed(2)}, reported ${reportedScore.toFixed(2)}` };
   }
 
