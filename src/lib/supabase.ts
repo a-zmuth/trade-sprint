@@ -7,12 +7,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Function to create a fresh client for server-side operations
-export const createServerSupabaseClient = () => {
-  return createClient(supabaseUrl, supabaseAnonKey, {
+export const createServerSupabaseClient = (accessToken?: string) => {
+  const options: any = {
     auth: {
-      persistSession: false, // Don't persist session on the server
+      persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-  });
+  };
+
+  if (accessToken) {
+    options.global = {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, options);
 };

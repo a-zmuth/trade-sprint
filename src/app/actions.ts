@@ -20,17 +20,15 @@ export async function submitScore(
   reportedScore: number,
   accessToken?: string
 ) {
-  const supabase = createServerSupabaseClient();
-  
-  if (accessToken) {
-    // Note: providing a dummy refresh_token can sometimes cause issues if the library
-    // tries to use it. If access_token is enough for the operation, we can just set it.
-    await supabase.auth.setSession({ access_token: accessToken, refresh_token: 'dummy' });
+  if (!accessToken) {
+    return { success: false, error: 'Access token missing. Please sign in again.' };
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const supabase = createServerSupabaseClient(accessToken);
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
   
-  if (!user) {
+  if (authError || !user) {
+    console.error('Auth error in submitScore:', authError);
     return { success: false, error: 'You must be logged in to submit a score.' };
   }
 
@@ -145,11 +143,14 @@ export async function getLeaderboards() {
  * Fetches statistics for the current user.
  */
 export async function getUserStats(accessToken: string) {
-  const supabase = createServerSupabaseClient();
-  await supabase.auth.setSession({ access_token: accessToken, refresh_token: 'dummy' });
+  if (!accessToken) return null;
+  const supabase = createServerSupabaseClient(accessToken);
   
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error('Auth error in getUserStats:', authError);
+    return null;
+  }
 
   const { data: sessions } = await supabase
     .from('game_sessions')
