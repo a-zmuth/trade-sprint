@@ -53,6 +53,20 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, [fetchUserStats]);
 
+  const signIn = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) alert(error.message);
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   // Fetch Leaderboards
   const fetchLeaderboards = useCallback(async () => {
     try {
