@@ -91,45 +91,39 @@ export async function submitScore(
 }
 
 /**
- * Fetches the daily and weekly leaderboards.
+ * Fetches the daily (now All-Time for debugging) and weekly leaderboards.
  */
 export async function getLeaderboards() {
   const supabase = createServerSupabaseClient();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   
-  // Start of the week (Monday)
-  const startOfWeek = new Date(today);
-  const day = startOfWeek.getDay();
-  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-  startOfWeek.setDate(diff);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  // Daily: Top scores for today
-  // We use .select() with no parameters to ensure we get all columns if needed, 
-  // but explicitly naming them is better for performance.
+  // For debugging: Fetching all-time top scores instead of just today
   const { data: dailyScores, error: dailyError } = await supabase
     .from('game_sessions')
     .select('id, user_id, user_email, final_score, created_at')
-    .gte('created_at', today.toISOString())
     .order('final_score', { ascending: false })
     .limit(10);
 
-  if (dailyError) console.error('Error fetching daily leaderboard:', dailyError);
+  if (dailyError) {
+    console.error('SUPABASE ERROR (Daily/All-Time):', dailyError);
+  } else {
+    console.log(`Successfully fetched ${dailyScores?.length || 0} scores for All-Time leaderboard`);
+  }
 
-  // Weekly: Cumulative scores for the week
+  // Weekly: Cumulative scores for the last 30 days (broader window for debugging)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const { data: weeklyScores, error: weeklyError } = await supabase
     .from('game_sessions')
     .select('user_email, final_score')
-    .gte('created_at', startOfWeek.toISOString());
+    .gte('created_at', thirtyDaysAgo.toISOString());
 
-  if (weeklyError) console.error('Error fetching weekly leaderboard:', weeklyError);
+  if (weeklyError) console.error('SUPABASE ERROR (Weekly):', weeklyError);
 
   // Aggregate weekly scores manually
   const weeklyMap: Record<string, { user_email: string, total_score: number, games_played: number }> = {};
   
   (weeklyScores || []).forEach(score => {
-    // Fallback if user_email is somehow null
     const email = score.user_email || 'Anonymous';
     if (!weeklyMap[email]) {
       weeklyMap[email] = { user_email: email, total_score: 0, games_played: 0 };
