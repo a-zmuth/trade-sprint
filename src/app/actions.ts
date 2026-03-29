@@ -105,28 +105,36 @@ export async function getLeaderboards() {
   startOfWeek.setHours(0, 0, 0, 0);
 
   // Daily: Top scores for today
-  const { data: dailyScores } = await supabase
+  // We use .select() with no parameters to ensure we get all columns if needed, 
+  // but explicitly naming them is better for performance.
+  const { data: dailyScores, error: dailyError } = await supabase
     .from('game_sessions')
     .select('id, user_id, user_email, final_score, created_at')
     .gte('created_at', today.toISOString())
     .order('final_score', { ascending: false })
     .limit(10);
 
+  if (dailyError) console.error('Error fetching daily leaderboard:', dailyError);
+
   // Weekly: Cumulative scores for the week
-  const { data: weeklyScores } = await supabase
+  const { data: weeklyScores, error: weeklyError } = await supabase
     .from('game_sessions')
     .select('user_email, final_score')
     .gte('created_at', startOfWeek.toISOString());
 
-  // Aggregate weekly scores manually (since Supabase JS doesn't support GROUP BY well)
+  if (weeklyError) console.error('Error fetching weekly leaderboard:', weeklyError);
+
+  // Aggregate weekly scores manually
   const weeklyMap: Record<string, { user_email: string, total_score: number, games_played: number }> = {};
   
   (weeklyScores || []).forEach(score => {
-    if (!weeklyMap[score.user_email]) {
-      weeklyMap[score.user_email] = { user_email: score.user_email, total_score: 0, games_played: 0 };
+    // Fallback if user_email is somehow null
+    const email = score.user_email || 'Anonymous';
+    if (!weeklyMap[email]) {
+      weeklyMap[email] = { user_email: email, total_score: 0, games_played: 0 };
     }
-    weeklyMap[score.user_email].total_score += score.final_score;
-    weeklyMap[score.user_email].games_played += 1;
+    weeklyMap[email].total_score += score.final_score;
+    weeklyMap[email].games_played += 1;
   });
 
   const weeklyAggregated = Object.values(weeklyMap)
@@ -152,23 +160,34 @@ export async function getUserStats(accessToken: string) {
     return null;
   }
 
-  const { data: sessions } = await supabase
+  const { data: sessions, error: sessionError } = await supabase
     .from('game_sessions')
     .select('final_score, created_at')
     .eq('user_id', user.id);
 
-  if (!sessions) return null;
+  if (sessionError) {
+    console.error('Error fetching user sessions:', sessionError);
+    return null;
+  }
+
+  if (!sessions || sessions.length === 0) return {
+    totalGames: 0,
+    totalScore: 0,
+    bestScore: 0,
+    avgScore: 0,
+    lastPlayed: null
+  };
 
   const totalGames = sessions.length;
   const totalScore = sessions.reduce((acc, s) => acc + s.final_score, 0);
   const bestScore = Math.max(0, ...sessions.map(s => s.final_score));
-  const avgScore = totalGames > 0 ? totalScore / totalGames : 0;
+  const avgScore = totalScore / totalGames;
 
   return {
     totalGames,
     totalScore,
     bestScore,
     avgScore,
-    lastPlayed: sessions.length > 0 ? sessions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at : null
+    lastPlayed: [...sessions].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
   };
 }
