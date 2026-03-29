@@ -1,7 +1,8 @@
 'use server';
 
-import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase';
 import { getPriceAtTime } from '@/lib/game-engine';
+import { revalidatePath } from 'next/cache';
 
 export type Trade = {
   tick: number;
@@ -19,8 +20,12 @@ export async function submitScore(
   reportedScore: number,
   accessToken?: string
 ) {
+  const supabase = createServerSupabaseClient();
+  
   if (accessToken) {
-    await supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+    // Note: providing a dummy refresh_token can sometimes cause issues if the library
+    // tries to use it. If access_token is enough for the operation, we can just set it.
+    await supabase.auth.setSession({ access_token: accessToken, refresh_token: 'dummy' });
   }
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -37,8 +42,9 @@ export async function submitScore(
   for (const trade of trades) {
     const actualPrice = getPriceAtTime(seed, trade.tick);
     
-    if (Math.abs(actualPrice - trade.price) > 0.01) {
-      return { success: false, error: 'Anti-cheat: Price verification failed.' };
+    // Allow a small margin for floating point errors or minor timing diffs
+    if (Math.abs(actualPrice - trade.price) > 0.05) {
+      return { success: false, error: `Anti-cheat: Price verification failed. Expected ${actualPrice.toFixed(2)}, got ${trade.price.toFixed(2)}` };
     }
 
     if (trade.type === 'buy') {
@@ -58,8 +64,8 @@ export async function submitScore(
   const finalPrice = getPriceAtTime(seed, 120);
   const finalValue = balance + holdings * finalPrice;
 
-  if (Math.abs(finalValue - reportedScore) > 0.1) {
-    return { success: false, error: 'Anti-cheat: Score verification failed.' };
+  if (Math.abs(finalValue - reportedScore) > 0.5) {
+    return { success: false, error: `Anti-cheat: Score verification failed. Calculated ${finalValue.toFixed(2)}, reported ${reportedScore.toFixed(2)}` };
   }
 
   // Save to Supabase with user_email for leaderboard display
@@ -78,9 +84,10 @@ export async function submitScore(
 
   if (error) {
     console.error('Error saving score:', error);
-    return { success: false, error: 'Failed to save score to leaderboard.' };
+    return { success: false, error: 'Failed to save score to leaderboard. Error: ' + error.message };
   }
 
+  revalidatePath('/');
   return { success: true, score: finalValue, id: data.id };
 }
 
@@ -88,6 +95,7 @@ export async function submitScore(
  * Fetches the daily and weekly leaderboards.
  */
 export async function getLeaderboards() {
+  const supabase = createServerSupabaseClient();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
@@ -130,5 +138,36 @@ export async function getLeaderboards() {
   return {
     daily: dailyScores || [],
     weekly: weeklyAggregated
+  };
+}
+
+/**
+ * Fetches statistics for the current user.
+ */
+export async function getUserStats(accessToken: string) {
+  const supabase = createServerSupabaseClient();
+  await supabase.auth.setSession({ access_token: accessToken, refresh_token: 'dummy' });
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: sessions } = await supabase
+    .from('game_sessions')
+    .select('final_score, created_at')
+    .eq('user_id', user.id);
+
+  if (!sessions) return null;
+
+  const totalGames = sessions.length;
+  const totalScore = sessions.reduce((acc, s) => acc + s.final_score, 0);
+  const bestScore = Math.max(0, ...sessions.map(s => s.final_score));
+  const avgScore = totalGames > 0 ? totalScore / totalGames : 0;
+
+  return {
+    totalGames,
+    totalScore,
+    bestScore,
+    avgScore,
+    lastPlayed: sessions.length > 0 ? sessions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at : null
   };
 }

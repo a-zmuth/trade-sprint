@@ -19,14 +19,17 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }: any) => {
       setUser(session?.user ?? null);
+      if (session?.access_token) fetchUserStats(session.access_token);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
       setUser(session?.user ?? null);
+      if (session?.access_token) fetchUserStats(session.access_token);
+      else setUserStats(null);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchUserStats]);
 
   const signIn = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -48,10 +51,22 @@ export default function Home() {
   const [customAmount, setCustomAmount] = useState<string>('');
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [weeklyLeaderboard, setWeeklyLeaderboard] = useState<any[]>([]);
+  const [userStats, setUserStats] = useState<{totalGames: number, totalScore: number, bestScore: number, avgScore: number, lastPlayed: string | null} | null>(null);
   const [view, setView] = useState<'game' | 'dashboard'>('game');
   
   const GAME_DURATION = 60; // seconds
   const TICK_RATE = 500; // ms
+
+  // Fetch User Stats
+  const fetchUserStats = useCallback(async (token: string) => {
+    try {
+      const { getUserStats } = await import('./actions');
+      const stats = await getUserStats(token);
+      setUserStats(stats);
+    } catch (e) {
+      console.error('Failed to fetch user stats:', e);
+    }
+  }, []);
 
   // Fetch Leaderboards
   const fetchLeaderboards = useCallback(async () => {
@@ -93,6 +108,7 @@ export default function Home() {
       const result = await submitScore(seed, currentTrades, finalPortfolioValue, session?.access_token);
       setVerificationResult(result);
       fetchLeaderboards();
+      if (session?.access_token) fetchUserStats(session.access_token);
     } catch (e) {
       setVerificationResult({ success: false, error: 'Failed to connect to server.' });
     } finally {
@@ -217,11 +233,25 @@ export default function Home() {
 
               <div className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 px-2">Your Performance</h3>
-                <div className="bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
-                   <div className="flex justify-between items-center">
-                      <span className="text-zinc-400 text-sm">Tournaments Joined</span>
-                      <span className="font-mono font-bold">1</span>
-                   </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-widest mb-1">Games Played</div>
+                    <div className="font-mono font-bold text-lg">{userStats?.totalGames ?? 0}</div>
+                  </div>
+                  <div className="bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-widest mb-1">Best Score</div>
+                    <div className="font-mono font-bold text-lg text-emerald-500">{formatCurrency(userStats?.bestScore ?? 0)}</div>
+                  </div>
+                  <div className="bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-widest mb-1">Avg Score</div>
+                    <div className="font-mono font-bold text-lg">{formatCurrency(userStats?.avgScore ?? 0)}</div>
+                  </div>
+                  <div className="bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
+                    <div className="text-zinc-500 text-[10px] uppercase tracking-widest mb-1">Last Played</div>
+                    <div className="font-mono font-bold text-[10px]">
+                      {userStats?.lastPlayed ? new Date(userStats.lastPlayed).toLocaleDateString() : 'Never'}
+                    </div>
+                  </div>
                 </div>
               </div>
 
