@@ -72,6 +72,7 @@ export default function Home() {
     try {
       const { getLeaderboards } = await import('./actions');
       const data = await getLeaderboards();
+      console.log('Leaderboard data received:', data); // DEBUG LOG
       setLeaderboard(data.daily);
       setWeeklyLeaderboard(data.weekly);
     } catch (e) {

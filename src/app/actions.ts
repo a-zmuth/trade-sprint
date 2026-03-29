@@ -99,7 +99,7 @@ export async function getLeaderboards() {
   // For debugging: Fetching all-time top scores instead of just today
   const { data: dailyScores, error: dailyError } = await supabase
     .from('game_sessions')
-    .select('id, user_id, user_email, final_score, created_at')
+    .select('id, user_id, user_email, final_score, end_time')
     .order('final_score', { ascending: false })
     .limit(10);
 
@@ -116,7 +116,7 @@ export async function getLeaderboards() {
   const { data: weeklyScores, error: weeklyError } = await supabase
     .from('game_sessions')
     .select('user_email, final_score')
-    .gte('created_at', thirtyDaysAgo.toISOString());
+    .gte('end_time', thirtyDaysAgo.toISOString());
 
   if (weeklyError) console.error('SUPABASE ERROR (Weekly):', weeklyError);
 
@@ -157,7 +157,7 @@ export async function getUserStats(accessToken: string) {
 
   const { data: sessions, error: sessionError } = await supabase
     .from('game_sessions')
-    .select('final_score, created_at')
+    .select('final_score, end_time')
     .eq('user_id', user.id);
 
   if (sessionError) {
@@ -183,6 +183,6 @@ export async function getUserStats(accessToken: string) {
     totalScore,
     bestScore,
     avgScore,
-    lastPlayed: [...sessions].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
+    lastPlayed: [...sessions].sort((a, b) => new Date(b.end_time).getTime() - new Date(a.end_time).getTime())[0].end_time
   };
 }
